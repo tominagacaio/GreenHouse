@@ -1,0 +1,134 @@
+name: AstroDome - Pipeline DevSecOps
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─────────────────────────────────────────────
+  # ETAPA 1: Análise de Segredos Expostos
+  # ─────────────────────────────────────────────
+  secrets-scan:
+    name: Scan de Segredos Expostos
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detectar segredos expostos (Gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Bloqueia o pipeline se encontrar chaves de API,
+        # tokens ou credenciais hardcoded no código
+
+  # ─────────────────────────────────────────────
+  # ETAPA 2: Análise Estática de Código (SAST)
+  # ─────────────────────────────────────────────
+  sast-scan:
+    name: Análise Estática (SAST)
+    runs-on: ubuntu-latest
+    needs: secrets-scan
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: pip install bandit safety
+
+      - name: Bandit - Scan de vulnerabilidades no código Python
+        run: |
+          bandit -r ./src -f json -o bandit-report.json || true
+          bandit -r ./src -ll
+        # Detecta problemas como: injeção de SQL, uso de funções inseguras,
+        # configurações fracas de criptografia nos módulos do AstroDome
+
+      - name: Safety - Verificar dependências vulneráveis
+        run: |
+          safety check --full-report
+        # Verifica se bibliotecas de visão computacional (OpenCV, TensorFlow)
+        # ou de integração com APIs orbitais possuem CVEs conhecidos
+
+      - name: Salvar relatório SAST
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sast-report
+          path: bandit-report.json
+
+  # ─────────────────────────────────────────────
+  # ETAPA 3: Scan de Imagem Docker (Contêiner)
+  # ─────────────────────────────────────────────
+  container-scan:
+    name: Segurança em Contêineres
+    runs-on: ubuntu-latest
+    needs: sast-scan
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Build da imagem Docker do AstroDome
+        run: docker build -t astrodome:${{ github.sha }} .
+
+      - name: Trivy - Scan de vulnerabilidades na imagem
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: astrodome:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+        # Bloqueia o deploy se encontrar vulnerabilidades CRÍTICAS ou ALTAS
+        # nos módulos de IA botânica ou serviços de telemetria
+
+  # ─────────────────────────────────────────────
+  # ETAPA 4: Validação de Política de Segurança
+  # ─────────────────────────────────────────────
+  policy-check:
+    name: Conformidade e Políticas (Security as Code)
+    runs-on: ubuntu-latest
+    needs: container-scan
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Instalar checkov
+        run: pip install checkov
+
+      - name: Checkov - Validar infraestrutura como código
+        run: |
+          checkov -d ./infra --framework terraform --output cli
+        # Valida que os recursos de nuvem (AWS/GCP) do AstroDome seguem
+        # boas práticas: criptografia em repouso, logging habilitado,
+        # acesso mínimo (Zero Trust)
+
+  # ─────────────────────────────────────────────
+  # ETAPA 5: Deploy (apenas se tudo passou)
+  # ─────────────────────────────────────────────
+  deploy:
+    name: Deploy Seguro
+    runs-on: ubuntu-latest
+    needs: [secrets-scan, sast-scan, container-scan, policy-check]
+    if: github.ref == 'refs/heads/main' && success()
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Deploy para ambiente de produção
+        env:
+          NASA_API_KEY: ${{ secrets.NASA_API_KEY }}
+          TELEMETRY_DB_PASSWORD: ${{ secrets.TELEMETRY_DB_PASSWORD }}
+          ORBITAL_API_TOKEN: ${{ secrets.ORBITAL_API_TOKEN }}
+        run: |
+          echo "Todos os controles de segurança aprovados."
+          echo "Iniciando deploy do AstroDome..."
+          # ./deploy.sh
+        # Segredos são injetados via GitHub Secrets — NUNCA hardcoded
