@@ -123,5 +123,12 @@ Veja a pasta [`simulation/SIMULACAO.md`](./simulation/SIMULACAO.md) para o cená
 
 ## Grupo
 
-Projeto desenvolvido para a **Global Solution 1º Semestre 2026 — FIAP**
+André de Sousa Neves 
+Caio Sato Tominaga 
+Eduardo Brites Coutinho 
+Isabela Barcellos 
+Thaís Gonçalves Leoncio 
+
+
+Projeto desenvolvido para a **Global Solution 2º Semestre 2026 — FIAP**
 Curso: Engenharia de Software | Disciplina: Cibersegurança
